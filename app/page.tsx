@@ -27,7 +27,10 @@ export default async function Home() {
             <AnimatedHowItWorks />
             <AnimatedCta isLoggedIn={!!session} />
             {submissions.length > 0 && (
-              <AnimatedGallery submissions={submissions} />
+              <AnimatedGallery
+                submissions={submissions}
+                words={[prompt.word1, prompt.word2, prompt.word3]}
+              />
             )}
           </>
         ) : (

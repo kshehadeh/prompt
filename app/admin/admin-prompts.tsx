@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Prompt } from "@/app/generated/prisma/client";
 import { PromptForm } from "./prompt-form";
 import { PromptSidebar } from "./prompt-sidebar";
@@ -15,6 +15,7 @@ export function AdminPrompts({ prompts }: AdminPromptsProps) {
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [showHighlight, setShowHighlight] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const filteredPrompts = useMemo(() => {
     const now = new Date();
@@ -44,6 +45,7 @@ export function AdminPrompts({ prompts }: AdminPromptsProps) {
     setSelectedPromptId(promptId);
     setEditingPromptId(promptId);
     setShowHighlight(true);
+    setIsMobileSidebarOpen(false); // Close mobile sidebar when editing
     setTimeout(() => setShowHighlight(false), 2000);
   }
 
@@ -59,37 +61,138 @@ export function AdminPrompts({ prompts }: AdminPromptsProps) {
     }
   }
 
-  return (
-    <div className="flex gap-8">
-      <section
-        id="prompt-form-section"
-        className={`flex-1 rounded-3xl p-8 ${
-          showHighlight ? "animate-glow-pulse" : ""
-        }`}
-      >
-        <h2 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-white">
-          Manage Prompts
-        </h2>
-        <PromptForm
-          prompts={prompts}
-          externalSelectedPromptId={selectedPromptId}
-          onSelectionHandled={handleSelectionHandled}
-          onModeChange={handleFormModeChange}
-        />
-      </section>
+  // Close mobile sidebar when editing starts
+  useEffect(() => {
+    if (editingPromptId) {
+      setIsMobileSidebarOpen(false);
+    }
+  }, [editingPromptId]);
 
-      {filteredPrompts.length > 0 && (
-        <aside className="w-72 shrink-0">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-white">
-            Recent & Upcoming
+  return (
+    <>
+      <div className="flex gap-8">
+        <section
+          id="prompt-form-section"
+          className={`flex-1 rounded-3xl p-8 ${
+            filteredPrompts.length > 0 ? "pb-24 md:pb-8" : ""
+          } ${
+            showHighlight ? "animate-glow-pulse" : ""
+          }`}
+        >
+          <h2 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-white">
+            Manage Prompts
           </h2>
-          <PromptSidebar
-            prompts={filteredPrompts}
-            onEditPrompt={handleEditPrompt}
-            editingPromptId={editingPromptId}
+          <PromptForm
+            prompts={prompts}
+            externalSelectedPromptId={selectedPromptId}
+            onSelectionHandled={handleSelectionHandled}
+            onModeChange={handleFormModeChange}
           />
-        </aside>
-      )}
-    </div>
+        </section>
+
+        {filteredPrompts.length > 0 && (
+          <>
+            {/* Desktop Sidebar */}
+            <aside className="hidden w-72 shrink-0 md:block">
+              <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-white">
+                Recent & Upcoming
+              </h2>
+              <PromptSidebar
+                prompts={filteredPrompts}
+                onEditPrompt={handleEditPrompt}
+                editingPromptId={editingPromptId}
+              />
+            </aside>
+
+            {/* Mobile Bottom Bar */}
+            <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
+              <div
+                className={`flex flex-col overflow-hidden border-t border-zinc-200 bg-white shadow-2xl transition-all duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900 ${
+                  isMobileSidebarOpen ? "max-h-[600px]" : "max-h-20"
+                }`}
+              >
+                {/* Collapsed Bar / Header */}
+                <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                  {!isMobileSidebarOpen ? (
+                    <>
+                      <div className="flex-1">
+                        <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
+                          Recent & Upcoming
+                        </h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {filteredPrompts.length} prompt
+                          {filteredPrompts.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setIsMobileSidebarOpen(true)}
+                        className="p-2 text-zinc-600 dark:text-zinc-400"
+                        aria-label="Expand sidebar"
+                      >
+                        <svg
+                          className="h-5 w-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 15l7-7 7 7"
+                          />
+                        </svg>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                        Recent & Upcoming
+                      </h2>
+                      <button
+                        onClick={() => setIsMobileSidebarOpen(false)}
+                        className="rounded-full p-2 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        aria-label="Close sidebar"
+                      >
+                        <svg
+                          className="h-5 w-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Expanded Content */}
+                <div className="flex-1 overflow-y-auto px-4 py-4">
+                  <PromptSidebar
+                    prompts={filteredPrompts}
+                    onEditPrompt={handleEditPrompt}
+                    editingPromptId={editingPromptId}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Overlay */}
+            <div
+              className={`fixed inset-0 z-30 bg-black/50 transition-opacity duration-300 md:hidden ${
+                isMobileSidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+          </>
+        )}
+      </div>
+    </>
   );
 }
