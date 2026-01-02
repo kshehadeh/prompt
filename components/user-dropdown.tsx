@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
 
@@ -82,6 +83,13 @@ export function UserDropdown({ name, image }: UserDropdownProps) {
       {isOpen && (
         <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
           <div className="py-1">
+            <Link
+              href="/profile/edit"
+              onClick={() => setIsOpen(false)}
+              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              Edit Profile
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full px-4 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
