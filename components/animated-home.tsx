@@ -153,7 +153,10 @@ export function AnimatedGallery({ submissions, words }: AnimatedGalleryProps) {
                   )}
                 </>
               ) : submission.text ? (
-                <TextThumbnail text={submission.text} className="h-full w-full" />
+                <TextThumbnail
+                  text={submission.text}
+                  className="h-full w-full"
+                />
               ) : (
                 <div className="flex h-full items-center justify-center p-4">
                   <p className="line-clamp-4 text-sm text-zinc-600 dark:text-zinc-400">

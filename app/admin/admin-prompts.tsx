@@ -75,9 +75,7 @@ export function AdminPrompts({ prompts }: AdminPromptsProps) {
           id="prompt-form-section"
           className={`flex-1 rounded-3xl p-8 ${
             filteredPrompts.length > 0 ? "pb-24 md:pb-8" : ""
-          } ${
-            showHighlight ? "animate-glow-pulse" : ""
-          }`}
+          } ${showHighlight ? "animate-glow-pulse" : ""}`}
         >
           <h2 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-white">
             Manage Prompts
@@ -186,7 +184,9 @@ export function AdminPrompts({ prompts }: AdminPromptsProps) {
             {/* Mobile Overlay */}
             <div
               className={`fixed inset-0 z-30 bg-black/50 transition-opacity duration-300 md:hidden ${
-                isMobileSidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                isMobileSidebarOpen
+                  ? "opacity-100"
+                  : "pointer-events-none opacity-0"
               }`}
               onClick={() => setIsMobileSidebarOpen(false)}
             />

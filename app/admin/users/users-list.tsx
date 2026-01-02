@@ -75,9 +75,7 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">
                     <span className="text-base font-medium text-zinc-600 dark:text-zinc-400">
-                      {user.name?.charAt(0) ||
-                        user.email?.charAt(0) ||
-                        "?"}
+                      {user.name?.charAt(0) || user.email?.charAt(0) || "?"}
                     </span>
                   </div>
                 )}
@@ -100,13 +98,17 @@ export function UsersList({ users, currentUserId }: UsersListProps) {
 
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-500 dark:text-zinc-400">Joined</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    Joined
+                  </span>
                   <span className="text-zinc-900 dark:text-white">
                     {new Date(user.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-500 dark:text-zinc-400">Role</span>
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Role
+                  </span>
                   <span
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
                       user.isAdmin

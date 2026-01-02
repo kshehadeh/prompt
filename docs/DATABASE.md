@@ -310,20 +310,27 @@ const prompt = await getCurrentPrompt();
 
 ## Architecture
 
+Images are uploaded directly from the browser to Cloudflare R2 using presigned URLs, bypassing serverless function payload limits:
+
 ```
-┌──────────────┐     ┌─────────────────┐     ┌────────────────┐
-│   Browser    │────▶│  Next.js API    │────▶│  Cloudflare R2 │
-│  (FormData)  │     │  /api/upload    │     │    (S3 API)    │
-└──────────────┘     └─────────────────┘     └────────────────┘
-                              │
-                              ▼
-                     ┌─────────────────┐
-                     │   PostgreSQL    │
-                     │  (stores URL)   │
-                     └─────────────────┘
+┌──────────────┐     ┌─────────────────┐
+│   Browser    │────▶│  /api/upload/   │  1. Request presigned URL
+│              │     │     presign     │
+│              │◀────│                 │  2. Return presigned URL + public URL
+│              │     └─────────────────┘
+│              │
+│              │     ┌────────────────┐
+│              │────▶│  Cloudflare R2 │  3. PUT file directly to R2
+└──────────────┘     └────────────────┘
+       │
+       ▼
+┌─────────────────┐
+│   PostgreSQL    │  4. Save public URL in submission
+│  (stores URL)   │
+└─────────────────┘
 ```
 
-Images are stored in Cloudflare R2 (S3-compatible storage), and only the public URL is stored in the database.
+This approach allows uploads up to 10MB without hitting Vercel's 4.5MB serverless function payload limit.
 
 ## Configuration
 
@@ -337,42 +344,103 @@ R2_BUCKET_NAME="wonder-weekly"
 R2_PUBLIC_URL="https://your-r2-public-url.com"
 ```
 
-## Upload Flow
+### R2 CORS Configuration
 
-### 1. Client Upload
+For direct browser uploads to work, you **must** configure CORS on your R2 bucket. Without this, you'll get CORS errors when trying to upload.
 
-```typescript
-const formData = new FormData();
-formData.append("file", file);
+#### Step-by-Step Setup
 
-const response = await fetch("/api/upload", {
-  method: "POST",
-  body: formData,
-});
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Navigate to **R2** → Select your bucket → **Settings** → **CORS Policy**
+3. Click **Edit CORS Policy** or **Add CORS Policy**
+4. Paste the following JSON configuration:
 
-const { imageUrl } = await response.json();
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://your-production-domain.com"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "Content-Length"],
+    "ExposedHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
 ```
 
-### 2. API Processing (`/api/upload`)
+5. **Important**: Replace `https://your-production-domain.com` with your actual production domain
+6. Click **Save**
+
+#### Troubleshooting CORS Errors
+
+If you're still getting CORS errors after configuration:
+
+1. **Verify the origin matches exactly**: The origin in your CORS policy must match exactly what the browser sends (including the protocol `http://` or `https://` and port number)
+
+2. **Check browser console**: Look for the exact error message. It will show which origin is being blocked
+
+3. **Common issues**:
+   - Missing `http://localhost:3000` for local development
+   - Wrong port number (e.g., using 3001 but only configured 3000)
+   - Missing `PUT` method in AllowedMethods
+   - Missing `Content-Type` in AllowedHeaders
+
+4. **Test the CORS configuration**: After saving, wait a few seconds for changes to propagate, then try uploading again
+
+5. **For production**: Make sure your production domain is included in the `AllowedOrigins` array
+
+## Upload Flow
+
+### 1. Request Presigned URL
+
+```typescript
+const response = await fetch("/api/upload/presign", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    fileType: file.type,
+    fileSize: file.size,
+  }),
+});
+
+const { presignedUrl, publicUrl } = await response.json();
+```
+
+### 2. Upload Directly to R2
+
+```typescript
+await fetch(presignedUrl, {
+  method: "PUT",
+  body: file,
+  headers: { "Content-Type": file.type },
+});
+
+// Use publicUrl for the submission
+```
+
+### 3. API Processing (`/api/upload/presign`)
 
 1. **Authentication**: Verifies user session
 2. **Validation**:
    - File type must be: JPEG, PNG, WebP, or GIF
    - Maximum size: 10MB
-3. **Upload to R2**:
-   - Generates unique filename: `{userId}/{uuid}.{extension}`
-   - Uploads via AWS S3 SDK (R2 is S3-compatible)
-4. **Returns**: Public URL for the uploaded image
+3. **Generate Presigned URL**:
+   - Creates unique filename: `{userId}/{uuid}.{extension}`
+   - Signs a PUT request valid for 5 minutes
+4. **Returns**: Presigned URL and final public URL
 
-### 3. Database Storage
+### 4. Database Storage
 
-The returned `imageUrl` is stored in the `Submission.imageUrl` field:
+The `publicUrl` is stored in the `Submission.imageUrl` field:
 
 ```typescript
 await prisma.submission.upsert({
   where: { userId_promptId_wordIndex: { userId, promptId, wordIndex } },
-  update: { imageUrl, title, text },
-  create: { userId, promptId, wordIndex, imageUrl, title, text },
+  update: { imageUrl: publicUrl, title, text },
+  create: { userId, promptId, wordIndex, imageUrl: publicUrl, title, text },
 });
 ```
 

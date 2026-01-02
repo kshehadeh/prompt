@@ -32,20 +32,54 @@ export function SubmissionSlots({
     imageUrl: string;
   }>({ title: "", text: "", imageUrl: "" });
 
+  // Track original image URL (from existing submission) and newly uploaded URLs
+  const [originalImageUrl, setOriginalImageUrl] = useState<string>("");
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+
+  // Helper to delete an image from R2
+  async function deleteImage(imageUrl: string) {
+    if (!imageUrl) return;
+    try {
+      await fetch("/api/upload/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl }),
+      });
+    } catch (err) {
+      // Silently fail - cleanup is best-effort
+      console.error("Failed to delete image:", err);
+    }
+  }
+
+  // Clean up all uploaded images that weren't saved
+  async function cleanupUploadedImages(savedImageUrl?: string) {
+    const imagesToDelete = uploadedImages.filter(
+      (url) => url !== savedImageUrl && url !== originalImageUrl,
+    );
+    await Promise.all(imagesToDelete.map(deleteImage));
+    setUploadedImages([]);
+  }
+
   function openSlot(wordIndex: number) {
     const existing = existingSubmissions[wordIndex];
+    const existingImageUrl = existing?.imageUrl || "";
     setFormData({
       title: existing?.title || "",
       text: existing?.text || "",
-      imageUrl: existing?.imageUrl || "",
+      imageUrl: existingImageUrl,
     });
+    setOriginalImageUrl(existingImageUrl);
+    setUploadedImages([]);
     setActiveSlot(wordIndex);
     setError(null);
   }
 
-  function closeSlot() {
+  async function closeSlot() {
+    // Clean up any uploaded images before closing
+    await cleanupUploadedImages();
     setActiveSlot(null);
     setFormData({ title: "", text: "", imageUrl: "" });
+    setOriginalImageUrl("");
     setError(null);
   }
 
@@ -85,21 +119,47 @@ export function SubmissionSlots({
     setError(null);
 
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
-
-      const response = await fetch("/api/upload", {
+      // Step 1: Get presigned URL from server
+      const presignResponse = await fetch("/api/upload/presign", {
         method: "POST",
-        body: uploadFormData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileType: file.type,
+          fileSize: file.size,
+        }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Upload failed");
+      if (!presignResponse.ok) {
+        const data = await presignResponse.json();
+        throw new Error(data.error || "Failed to get upload URL");
       }
 
-      const { imageUrl } = await response.json();
-      setFormData((prev) => ({ ...prev, imageUrl }));
+      const { presignedUrl, publicUrl } = await presignResponse.json();
+
+      // Step 2: Upload directly to R2 using presigned URL
+      const uploadResponse = await fetch(presignedUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        // Check for CORS errors specifically
+        if (uploadResponse.status === 0 || uploadResponse.status === 403) {
+          throw new Error(
+            "CORS error: Please configure CORS on your R2 bucket to allow uploads from this origin. See docs/DATABASE.md for instructions.",
+          );
+        }
+        throw new Error(
+          `Upload to storage failed: ${uploadResponse.status} ${uploadResponse.statusText}`,
+        );
+      }
+
+      // Track this upload for potential cleanup
+      setUploadedImages((prev) => [...prev, publicUrl]);
+      setFormData((prev) => ({ ...prev, imageUrl: publicUrl }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -130,7 +190,18 @@ export function SubmissionSlots({
         throw new Error(data.error || "Failed to save");
       }
 
-      closeSlot();
+      // Clean up any replaced images (keep only the saved one)
+      await cleanupUploadedImages(formData.imageUrl);
+
+      // If the user replaced the original image with a new one, delete the old one
+      if (originalImageUrl && originalImageUrl !== formData.imageUrl) {
+        await deleteImage(originalImageUrl);
+      }
+
+      setActiveSlot(null);
+      setFormData({ title: "", text: "", imageUrl: "" });
+      setOriginalImageUrl("");
+      setError(null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
@@ -144,12 +215,9 @@ export function SubmissionSlots({
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/submissions?promptId=${promptId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`/api/submissions?promptId=${promptId}`, {
+        method: "DELETE",
+      });
 
       if (!response.ok) {
         const data = await response.json();
@@ -159,7 +227,9 @@ export function SubmissionSlots({
       setShowClearModal(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to clear submissions");
+      setError(
+        err instanceof Error ? err.message : "Failed to clear submissions",
+      );
     } finally {
       setIsClearing(false);
     }
@@ -295,8 +365,8 @@ export function SubmissionSlots({
             )}
 
             <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
-              Submit a photo, artwork, text, or any combination. At least one
-              is required.
+              Submit a photo, artwork, text, or any combination. At least one is
+              required.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -334,9 +404,17 @@ export function SubmissionSlots({
                     </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({ ...prev, imageUrl: "" }))
-                      }
+                      onClick={async () => {
+                        const currentUrl = formData.imageUrl;
+                        setFormData((prev) => ({ ...prev, imageUrl: "" }));
+                        // If this is a newly uploaded image (not the original), delete it
+                        if (currentUrl && currentUrl !== originalImageUrl) {
+                          await deleteImage(currentUrl);
+                          setUploadedImages((prev) =>
+                            prev.filter((url) => url !== currentUrl),
+                          );
+                        }
+                      }}
                       className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
                     >
                       <svg
