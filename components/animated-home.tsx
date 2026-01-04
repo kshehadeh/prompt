@@ -179,6 +179,9 @@ function AnimatedGalleryContent({
                     alt={submission.title || "Submission"}
                     className="h-full w-full object-cover"
                   />
+                  <div className="absolute bottom-2 left-2 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                    {words[submission.wordIndex - 1]}
+                  </div>
                   {isLoggedIn && (
                     <FavoriteButton
                       submissionId={submission.id}
@@ -210,6 +213,9 @@ function AnimatedGalleryContent({
                     text={submission.text}
                     className="h-full w-full"
                   />
+                  <div className="absolute bottom-2 left-2 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                    {words[submission.wordIndex - 1]}
+                  </div>
                   {isLoggedIn && (
                     <FavoriteButton
                       submissionId={submission.id}
@@ -219,10 +225,13 @@ function AnimatedGalleryContent({
                   )}
                 </div>
               ) : (
-                <div className="flex h-full items-center justify-center p-4">
+                <div className="relative flex h-full items-center justify-center p-4">
                   <p className="line-clamp-4 text-sm text-zinc-600 dark:text-zinc-400">
                     {submission.title || "Untitled"}
                   </p>
+                  <div className="absolute bottom-2 left-2 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                    {words[submission.wordIndex - 1]}
+                  </div>
                 </div>
               )}
             </motion.div>
